@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
 from PIL import Image
-
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -17,21 +17,22 @@ import torchvision.transforms as T
 
 # ================== CONFIG ==================
 
-SIGNS_NPZ = "signs.npz"
-PHOTOS_NPZ = "photos.npz"
-CKPT_PATH = "best.pth"  # checkpoint del tuo modello
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+SIGNS_NPZ  = os.path.join(BASE_DIR, "signs.npz")
+PHOTOS_NPZ = os.path.join(BASE_DIR, "photos.npz")
+CKPT_PATH  = os.path.join(BASE_DIR, "best.pth")
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD  = (0.229, 0.224, 0.225)
 
 
-# ================== MODELLO ==================
+
 
 class ConvEncoder(nn.Module):
     """ResNet152 backbone; può restituire mappa o vettore globale"""
     def __init__(self, out_dim=2048):
         super().__init__()
-        # IMPORTANTE: niente pesi pretrained → evita il download da internet
         base = models.resnet152(weights=None)
         self.stem = nn.Sequential(base.conv1, base.bn1, base.relu, base.maxpool)
         self.layer1, self.layer2, self.layer3, self.layer4 = (
@@ -67,8 +68,6 @@ class DualEncoder(nn.Module):
     def forward(self, img, sign):
         raise NotImplementedError
 
-
-# ================== CARICAMENTO MODELLO ==================
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -127,7 +126,6 @@ def _embed_from_url(url: str, is_sign: bool) -> np.ndarray:
         return _embed_photo_pil(img)
 
 
-# ================== CARICAMENTO EMBEDDING PRECALCOLATI ==================
 
 S = np.load(SIGNS_NPZ)
 sign_names = S["names"].astype(str)
@@ -141,7 +139,6 @@ sign_feats /= (np.linalg.norm(sign_feats, axis=1, keepdims=True) + 1e-8)
 photo_feats /= (np.linalg.norm(photo_feats, axis=1, keepdims=True) + 1e-8)
 
 
-# ================== MODELLI DI RISPOSTA ==================
 
 class ItemScore(BaseModel):
     name: str
@@ -160,8 +157,6 @@ class SearchPhotoResponse(BaseModel):
     query_type: str   # "photo_filename" o "photo_url"
     similar_signs: List[ItemScore]
 
-
-# ================== UTILITY ==================
 
 def find_sign_index(name: str) -> int:
     idx = np.where(sign_names == name)[0]
@@ -204,12 +199,10 @@ def similar_photos_from_vec(q_vec: np.ndarray, topk: int) -> List[ItemScore]:
     return [ItemScore(name=photo_names[i], score=float(sims[i])) for i in order]
 
 
-# ================== FASTAPI APP ==================
 
 app = FastAPI(title="Etruscan Signs Search API")
 
 
-# ---------- 1) endpoint per SEGNO (come prima) ----------
 
 @app.get("/search", response_model=SearchAllResponse)
 def search(
@@ -261,7 +254,6 @@ def search(
     )
 
 
-# ---------- 2) endpoint per FOTO: restituisce SOLO SEGNI ----------
 
 @app.get("/search_photo", response_model=SearchPhotoResponse)
 def search_photo(

@@ -1,0 +1,17 @@
+# ambienti
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# dati pesanti / dataset
+photos/
+signs/
+supporti/
+runs/
+results/
+
+# modelli e indici
+*.pth
+*.npz
+*.zip
