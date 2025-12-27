@@ -17,11 +17,46 @@ import torchvision.transforms as T
 
 # ================== CONFIG ==================
 
+# ================== CONFIG ==================
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 SIGNS_NPZ  = os.path.join(BASE_DIR, "signs.npz")
 PHOTOS_NPZ = os.path.join(BASE_DIR, "photos.npz")
 CKPT_PATH  = os.path.join(BASE_DIR, "best.pth")
+
+# URL pubbliche (consigliato: metterle come env var su Render)
+CKPT_URL   = os.environ.get("CKPT_URL", "")
+SIGNS_URL  = os.environ.get("SIGNS_URL", "")
+PHOTOS_URL = os.environ.get("PHOTOS_URL", "")
+
+def _download_if_missing(dst_path: str, url: str, timeout: int = 60):
+    """
+    Scarica url -> dst_path se il file non esiste.
+    Usa streaming per non caricare tutto in RAM.
+    """
+    if os.path.exists(dst_path) and os.path.getsize(dst_path) > 0:
+        return
+
+    if not url:
+        raise RuntimeError(f"Manca {os.path.basename(dst_path)} e la URL non è impostata (env var).")
+
+    tmp_path = dst_path + ".tmp"
+    print(f"[bootstrap] Download {url} -> {dst_path}")
+
+    with requests.get(url, stream=True, timeout=timeout) as r:
+        r.raise_for_status()
+        with open(tmp_path, "wb") as f:
+            for chunk in r.iter_content(chunk_size=1024 * 1024):  # 1MB
+                if chunk:
+                    f.write(chunk)
+
+    os.replace(tmp_path, dst_path)
+
+_download_if_missing(CKPT_PATH, CKPT_URL, timeout=300)     # best.pth è grande
+_download_if_missing(SIGNS_NPZ, SIGNS_URL, timeout=120)
+_download_if_missing(PHOTOS_NPZ, PHOTOS_URL, timeout=120)
+
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD  = (0.229, 0.224, 0.225)
